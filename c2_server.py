@@ -13,7 +13,11 @@ from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from cryptography.fernet import Fernet
-
+import sys
+import pkgutil
+# Patch za Python 3.14
+if not hasattr(pkgutil, 'get_loader'):
+    pkgutil.get_loader = lambda x: None
 # =====================================================================
 # KONFIGURACIJA
 # =====================================================================
